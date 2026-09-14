@@ -1,0 +1,2683 @@
+{
+  "name": "Multi-Agent UI Generation Pipeline To Promt with Spec tree 4 files and second FLOW (+ Flow 2: Feedback Verwerking)",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Upload Project Briefing",
+        "formDescription": "Upload your project briefing document (plain text .txt or PDF) to generate a UI prototype.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Project Briefing File",
+              "fieldType": "file",
+              "fieldName": "briefingFile",
+              "multipleFiles": false,
+              "acceptFileTypes": ".txt,.pdf",
+              "requiredField": true
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "buttonLabel": "Generate UI"
+        }
+      },
+      "id": "14a8dc19-4646-4712-b0bb-f21888cbf462",
+      "name": "Start Pipeline1",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        2160,
+        17808
+      ],
+      "webhookId": "d95c5511-28fb-4429-9786-fea0e98e4909"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "is-pdf",
+              "leftValue": "={{ $binary.briefingFile.mimeType }}",
+              "rightValue": "pdf",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "875f6467-f734-4e50-a0da-3c31e79b1eb8",
+      "name": "Is PDF?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2368,
+        17808
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "briefingFile",
+        "options": {}
+      },
+      "id": "4918af88-20b4-41ea-b947-cf07a0f21308",
+      "name": "Extract PDF Text1",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        2592,
+        17760
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "briefingText",
+              "value": "={{ $json.text }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f15be715-6c5c-4c03-938b-af0a902bba3c",
+      "name": "Normalize PDF Text1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        2800,
+        17760
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.briefingText }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You turn a raw project briefing into a structured summary with a bit more room \nthan a bare-bones version, while staying lightweight enough for a UI generator \nto work with efficiently. Extract only:\n- projectGoal: up to 10 sentences, covering what the project aims to achieve \n  and the core problem it solves.\n- targetUsers: one or two sentences on who uses this and their main need.\n- keyFeatures: 10-15 key features as a short list, each a concise phrase (not a \n  full paragraph).\n- futureVision: 4-8 sentences summarizing any explicitly mentioned future plans, \n  follow-up phases, planned integrations, or roadmap items in the briefing. Use \n  an empty string \"\" if the briefing mentions no future plans — do not invent \n  or speculate beyond what is explicitly stated.\nDo not add anything else. Do not invent features that are not in the briefing. \nOutput JSON: {\"projectGoal\": \"...\", \"targetUsers\": \"...\", \"keyFeatures\": [\"...\", \n\"...\", \"...\"], \"futureVision\": \"...\"}."
+        }
+      },
+      "id": "c25f76ca-174c-4d9d-9a91-1867e819103b",
+      "name": "AI Agent 1: Briefing Summary1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        3024,
+        17808
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 5000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "b933e387-fbeb-4ddb-8475-63a0589e1fac",
+      "name": "Claude Model - Briefing Summary1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        3008,
+        18016
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=   {{ JSON.stringify($json.output) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You create a short user persona based on the structured briefing, to help \ndownstream design decisions understand who this is actually for.\nExtract or infer:\n- name: a short representative name for this persona (can be generic, e.g. \n  \"Busy Manager Alex\" or \"New User Sam\" — derive the descriptor from the \n  briefing's domain, do not default to any specific industry).\n- role: their job title/role.\n- context: 2-4 sentences on the situation they use this in (time pressure, \n  environment, frequency of use).\n- primaryGoal: 2 sentences — what they most need to accomplish quickly.\n- frustrations: 4-6 short phrases on what currently makes their job harder \n  (based on the briefing, not invented).\nDo not invent details that contradict or are unsupported by the briefing. If \nmultiple user types are mentioned, focus on the primary/most frequent one \nonly — keep this to max 4 personas, \nReturn ONLY the raw JSON object, no explanation, no markdown code fences.\nOutput JSON: {\"name\": \"...\", \"role\": \"...\", \"context\": \"...\", \"primaryGoal\": \n\"...\", \"frustrations\": [\"...\", \"...\", \"...\"]}"
+        }
+      },
+      "id": "3723a398-6aeb-4ab5-8f72-98eaaa6c7946",
+      "name": "Ai Agent 2: User Persona's1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        3376,
+        17808
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 2000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "40b59a55-ce5d-457c-9326-0e53e1d48685",
+      "name": "Claude model - User Persona1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        3344,
+        18032
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"name\": \"Persona name\",\n  \"role\": \"Their job title or role\",\n  \"context\": \"Short description of their situation and environment\",\n  \"primaryGoal\": \"What they most need to accomplish\",\n  \"frustrations\": [\"Frustration 1\", \"Frustration 2\"]\n}"
+      },
+      "id": "74295859-79a6-4589-b567-53a353f00fb5",
+      "name": "User Persona Parser1",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        3504,
+        18032
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Briefing: {{ JSON.stringify($('AI Agent 1: Briefing Summary1').item.json.output) }}\nPersona: {{ JSON.stringify($('Ai Agent 2: User Persona\\'s1').item.json.output) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You research and define concrete visual design direction for this project, so \na designer has a real starting point instead of vague style suggestions.\n\nSTRICT SEARCH LIMITS (follow exactly, this is a hard budget constraint):\n- You may perform AT MOST 2 web searches in total. Never more, even if \n  results are unclear or incomplete.\n- Search 1: only to check if a named organization/brand exists and has \n  findable visual identity info (colors, style).\n- Search 2 (only if truly needed): a single broader search for reference \n  conventions in the relevant category, if search 1 found nothing usable.\n- If you cannot find useful information within these 2 searches, proceed \n  with well-reasoned generic guidance instead of searching further. Never \n  search \"to double check\" or refine something you already found.\n- Immediately after each search, extract ONLY the specific facts you need \n  (e.g. \"primary brand color: navy blue\", \"no clear brand identity found\") \n  in 1-2 short lines. Do not quote, repeat, or carry forward long snippets, \n  page contents, or search result text — discard everything except the \n  distilled fact.\n\nGiven the briefing and persona (no further research needed beyond the 2 \nsearches above), produce concrete, usable design tokens:\n\n- colorPalette: an object naming specific color roles this UI needs (e.g. \n  primary, secondary, background, surface, text-primary, text-secondary, \n  border, plus any status/meaning colors this specific project plausibly \n  needs, inferred from the briefing's projectGoal and keyFeatures — do not \n  assume any fixed set). For each role, give a concrete color description \n  precise enough to pick a hex value from (e.g. \"deep blue, brand-aligned, \n  for primary actions\" or \"warm amber for warning/attention states\").\n- typography: a short type scale (e.g. H1, H2, H3, body, label/caption) with \n  relative size and weight guidance for each, and a suggested font pairing \n  category (e.g. \"clean geometric sans-serif for headings, highly legible \n  sans-serif for body\") — not a specific font name unless found directly.\n- borderRadius: a small scale (e.g. none/subtle/medium/large) and which \n  components should use which, based on the tone this platform should convey \n  (sharp/technical vs soft/approachable).\n- elevation: guidance on shadow/depth usage (e.g. flat, subtle, prominent) and \n  when to use it (e.g. cards, modals, floating actions) — keep this \n  proportional to the platform's tone, not decorative by default.\n- sourceNote: 1-2 sentences stating what you based this on — either \"existing \n  brand found: [organization name]\" with the 1-2 facts found, or \"no existing \n  brand found, based on general [category] conventions\" — do not include raw \n  search text here.\n\nDo not invent specific hex codes with false precision if you're inferring from \ngeneral conventions rather than a found brand — describe colors precisely in \nwords instead, so the designer can pick exact values.\n\nReturn ONLY the raw JSON object matching the schema. No explanation, no \nmarkdown code fences, no text before or after the JSON.\n\nSchema: {\"colorPalette\": {\"...\": \"...\"}, \"typography\": {\"...\": \"...\"}, \n\"borderRadius\": {\"...\": \"...\"}, \"elevation\": {\"...\": \"...\"}, \"sourceNote\": \"...\"}"
+        }
+      },
+      "id": "00923b98-6544-4317-bb20-dcafeef40af1",
+      "name": "Ai Agent3: Design Research & Style Tokens1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        3728,
+        17808
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 3000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "22eaa268-460f-4b14-a2ee-da9d5b75c384",
+      "name": "Anthropic Chat Model6",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        3696,
+        17984
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "q": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Query', ``, 'string') }}",
+        "locationSettings": {},
+        "languageSettings": {},
+        "searchOptions": {},
+        "timeFilters": {},
+        "pagination": {},
+        "advancedOptions": {},
+        "requestOptions": {}
+      },
+      "id": "c0a7f730-58b4-4cf1-9c3b-8c1aad7ef4a1",
+      "name": "Search google in SearchApi1",
+      "type": "@searchapi/n8n-nodes-searchapi.searchApiTool",
+      "typeVersion": 1,
+      "position": [
+        3808,
+        18032
+      ],
+      "credentials": {
+        "searchApi": {
+          "id": "tMy2ekj2bjAtQNNG",
+          "name": "SearchApi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"colorPalette\": {\"primary\": \"...\", \"secondary\": \"...\", \"background\": \"...\", \"surface\": \"...\", \"text-primary\": \"...\", \"text-secondary\": \"...\", \"border\": \"...\"}, \"typography\": {\"h1\": \"...\", \"h2\": \"...\", \"h3\": \"...\", \"body\": \"...\", \"label\": \"...\"}, \"borderRadius\": {\"scale\": \"...\", \"usage\": \"...\"}, \"elevation\": {\"scale\": \"...\", \"usage\": \"...\"}, \"sourceNote\": \"...\"}"
+      },
+      "id": "09971f23-35b8-479d-bb75-f309109d8563",
+      "name": "Structured Output Parser6",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        3920,
+        18080
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ JSON.stringify($('AI Agent 1: Briefing Summary1').item.json.output) }}",
+        "options": {
+          "systemMessage": "You turn the structured briefing into concrete user stories and requirements, \nto give downstream agents enough concrete detail to work with.\n\nExtract:\n- userStories: 5-8 user stories in the format \"As a [role], I want to [action], \n  so that [benefit]\" — derived directly from the briefing, not invented.\n- functionalRequirements: 6-10 short, specific requirements (what the system \n  must do), preserving concrete details from the briefing — named systems, \n  specific data fields, numbers, or workflows mentioned. Do not generalize \n  these away.\n- missingInfo: 0-5 short notes on anything the briefing left ambiguous or \n  underspecified. Always include this key as an array — use an empty array \n  [] if there is nothing to note, do not omit the key.\n\nReturn ONLY the raw JSON object, no explanation, no markdown code fences. \nAlways include all three keys (userStories, functionalRequirements, \nmissingInfo) even if missingInfo is an empty array.\nOutput JSON: {\"userStories\": [\"...\", \"...\"], \"functionalRequirements\": \n[\"...\", \"...\"], \"missingInfo\": [\"...\"]}"
+        }
+      },
+      "id": "76b08d25-af62-4b2b-92d3-443aefd18de3",
+      "name": "Ai agent 4: Requirements Validator1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        4048,
+        17808
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 2500,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "84e1a99e-2a37-4a58-859d-9d056d65562e",
+      "name": "Anthropic Chat Model7",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        4048,
+        18048
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n    \"userStories\": [\"User story 1\", \"User story 2\"],\n    \"functionalRequirements\": [\"Requirement 1\", \"Requirement 2\"],\n    \"missingInfo\": [\"Optional note 1\"]\n}"
+      },
+      "id": "2d3f573a-b030-46b5-8b80-eb3febae799b",
+      "name": "Structured Output Parser7",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        4192,
+        18048
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Structured briefing summary: {{ JSON.stringify($('AI Agent 1: Briefing Summary1').item.json.output) }}\nRequirements: {{ JSON.stringify($('Ai agent 4: Requirements Validator1').item.json.output) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You are an Information Architect. Based on the structured briefing, decide \nwhich UI components ONE screen needs and in what order.\nGuideline: use 5-15 components as a healthy default for a real, useful screen. \nOnly go below 8 if the briefing is genuinely thin, and only go above 8 if the \nbriefing explicitly lists distinct data categories that would be lost by \nmerging them (e.g. three genuinely separate concerns named in the briefing, \nnot just different aspects of the same concern).\n\nBEFORE listing components, reason through wayfinding/navigation needs \nexplicitly — this decision must never be silently skipped or left to chance:\n1. Does the requirements/briefing imply multiple distinct screens, sections, \n   or a multi-step flow (e.g. a pathway, wizard, or stage-based process)? If \n   so, the user needs a way to see their current position and move between \n   steps — this typically means a breadcrumb, step indicator, or stepper \n   component is required, not optional.\n2. Does the briefing imply multiple top-level areas or sections a user would \n   navigate between within the product (not just within this one screen)? If \n   so, primary navigation (e.g. a sidebar or top nav) is likely required.\n3. Base this decision on concrete evidence from the requirements — cite which \n   specific requirement or user story implies the need (or absence of need) \n   for navigation. Do not add navigation components decoratively, and do not \n   omit them just because the briefing didn't use the word \"navigation\" \n   explicitly — infer from the underlying structure described.\n\nAlways include your navigation decision as an explicit component in the \noutput, even when the decision is \"not needed.\" In that case, still add it \nas a component with type \"Navigation Assessment\" (or similar), and use its \n\"purpose\" field to state clearly why navigation is not required for this \nscreen, rather than omitting the topic entirely.\n\nFor each component give: type, purpose, content, and order (1, 2, 3...). \nWhen relevant, include a short \"dataPoints\" list (3-6 short field names) so \nthe UI generator knows exactly what fields to render, not just a vague theme.\nReturn ONLY the raw JSON object matching the schema. No explanation, no \nmarkdown code fences, no text before or after the JSON. Keep purpose and \ncontent fields concise - 1-2 sentences max each, not paragraphs.\nSchema: {\"screenTitle\": \"string\", \"components\": [{\"type\": \"string\", \"purpose\": \n\"string\", \"content\": \"string\", \"dataPoints\": [\"...\", \"...\"], \"order\": number}]}"
+        }
+      },
+      "id": "f1c0e8a3-3c0b-4b91-a470-d1a7867e9423",
+      "name": "Ai Agent 5: Information Architect1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        4512,
+        17808
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 5000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "347634ac-1e19-4f67-af7d-a9095eb93865",
+      "name": "Claude Model - Information Architect1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        4512,
+        18016
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{ \"screenTitle\": \"Main screen title\", \"components\": [{ \"type\": \"header\", \"purpose\": \"What this component does\", \"content\": \"What it contains or displays\", \"order\": 1 }] }"
+      },
+      "id": "e2a4a281-ad95-44ec-aa24-48a1a5224141",
+      "name": "Information Architect Parser1",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        4656,
+        18016
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Component plan: {{ JSON.stringify($('Ai Agent 5: Information Architect1').item.json.output) }}\nBriefing: {{ JSON.stringify($('AI Agent 1: Briefing Summary1').item.json.output) }}\nRequirements: {{ JSON.stringify($('Ai agent 4: Requirements Validator1').item.json.output) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You write the actual UI text (microcopy) for each component in the provided \ncomponent list, so a designer can build the screen without inventing labels \nor wording themselves.\nFor EACH component, based on its type, purpose, content, and dataPoints, \nprovide:\n- labels: an array of {field, text} pairs for the fields/buttons/headers this \n  component needs (e.g. [{\"field\": \"submitButton\", \"text\": \"Save changes\"}, \n  {\"field\": \"fieldLabel_dosage\", \"text\": \"Dosage\"}]). Use the dataPoints as a \n  guide for which fields need labels. Keep label text short (2-4 words), in \n  terminology natural to this specific briefing's domain — do not invent \n  generic placeholders like \"Field 1\", and do not default to any particular \n  industry's vocabulary. Include as many or as few label pairs as this \n  specific component actually needs.\n- emptyState: 1 short sentence shown when there is no data yet, if this \n  component can plausibly be empty. Use an empty string \"\" if not applicable.\n- errorState: 1 short sentence shown on a load/save error, if this component \n  involves data fetching or user input. Use an empty string \"\" if not \n  applicable.\n- helperText: 1 short optional sentence of guidance/context text next to the \n  component, only if genuinely useful. Use an empty string \"\" if not needed.\nRules:\n- Base all wording on the component's purpose/content/dataPoints and the \n  overall project context. Do not invent data fields that were not listed.\n- Match tone to whatever the briefing itself implies (formal, casual, \n  technical, consumer-facing, etc.) — infer this from projectGoal, do not \n  assume any specific field or industry.\n- Keep every string short and production-usable, not descriptive. Write the \n  actual button text, not \"a button that confirms the action.\"\n- Always include all four keys (labels, emptyState, errorState, helperText) \n  for every component, using \"\" for any that don't apply, and [] for labels \n  if there are genuinely no fields/buttons to label.\nReturn ONLY the raw JSON object matching the schema. No explanation, no \nmarkdown code fences, no text before or after the JSON.\nSchema: {\"components\": [{\"order\": number, \"labels\": [{\"field\": \"...\", \"text\": \n\"...\"}], \"emptyState\": \"...\", \"errorState\": \"...\", \"helperText\": \"...\"}]}"
+        }
+      },
+      "id": "41e29868-6179-41f0-bf94-6aef9991a4cf",
+      "name": "AI Agent6: Content & Microcopy1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        4912,
+        17808
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 10000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "38cd9878-4be7-4f50-9300-7467f59498a2",
+      "name": "Anthropic Chat Model8",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        4912,
+        18016
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"components\": [{\"order\": 1, \"labels\": [{\"field\": \"submitButton\", \"text\": \"Save changes\"}], \"emptyState\": \"...\", \"errorState\": \"...\", \"helperText\": \"...\"}]}"
+      },
+      "id": "5145c083-9a99-4130-a5ef-836244cd5cf0",
+      "name": "Structured Output Parser8",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        5056,
+        18016
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Component plan: {{ JSON.stringify($json.output) }}\nRequirements: {{ JSON.stringify($('Parse Requirements Output1').item.json.output) }}\nPersona: {{ JSON.stringify($('Ai Agent 2: User Persona\\'s1').item.json.output) }}\nDesign tokens: {{ JSON.stringify($('Ai Agent3: Design Research & Style Tokens1').item.json.output) }}",
+        "options": {
+          "systemMessage": "You generate a comprehensive, well-structured Markdown design brief for a UI/UX \ndesigner to build in Claude Design. Do NOT generate HTML, CSS, or any code — \noutput ONLY structured Markdown text describing what needs to be designed.\n\nYou will receive: a component list, requirements, user persona, and Design \nTokens (colorPalette, typography, borderRadius, elevation, sourceNote) from \nprior research. Use the Design Tokens as the grounded basis for the Style \nDirection section — do not invent alternative colors, fonts, or scales that \ncontradict or ignore them. If sourceNote indicates a specific brand was \nfound, reflect that grounding explicitly; if not, keep guidance as general as \nthe tokens already are.\n\nBased on all provided input, produce a design brief with these sections:\n\n## Screen Overview\n- Screen title and its primary goal (1-2 sentences)\n- Who uses this screen and their key need (from the persona)\n\n## Components\nFor EACH component in the provided list, include:\n- ### [Component Name] — render in natural, human-readable language even if \n  the input name is in code-style casing (e.g. write \"Critical Risk Alert\" \n  for an input named \"AlertBanner\")\n- **Purpose:** why this component exists\n- **Content:** what data/information it must show, as specific as possible\n- **States:** relevant states if applicable (e.g. default, loading, empty, error, \n  active/completed for progress-style elements)\n- **Priority:** high/medium/low, based on how critical this is to the user's task\n\n## Style Direction\n- Color usage, based on the provided Design Tokens — explain how each color \n  role should be applied, not just what it is\n- Typography guidance (hierarchy: headings vs body vs labels), based on the \n  provided type scale\n- Spacing/density guidance, derived from the usage context described in the \n  persona (e.g. quick/frequent use vs. deliberate/occasional use)\n- Border radius and elevation guidance, based on the provided tokens\n\n## Component Relationships\nBriefly note any meaningful relationships between components that should \ninform the designer's compositional judgment — which components are \ntypically used together, which compete for the user's primary attention, \nwhich are naturally secondary/reference material versus primary/actionable. \nDo not prescribe how this should translate into layout, spacing, or \nalignment — that is the designer's own creative decision to make based on \nthis understanding.\n\n## Interaction Patterns\n- Key interactive elements (buttons, forms, expandable sections) and their \n  expected behavior\n- Any navigation or flow between states/screens implied by the requirements\n\n## Accessibility Considerations\n- Specific things the designer should keep in mind (contrast, labeling, \n  keyboard navigation) based on the nature of this screen — as guidance, not \n  as code fixes\n\n## Open Questions / Assumptions\n- Anything ambiguous in the requirements that the designer should clarify or \n  decide on their own\n\nWrite in clear, professional design-brief language — as if handing this to a \nskilled designer who will build it themselves. Concrete means describing what \nthe eye should perceive and why (e.g. \"a bold, larger heading that anchors \nthe page\" or \"compact spacing to fit more on screen\") — never exact pixel, \nweight, or radius values; precision belongs in implementation, not in this \nbrief. Do not include any HTML tags, CSS syntax, or code blocks.\n\nReturn ONLY the Markdown content, no JSON wrapper, no explanation before or \nafter."
+        }
+      },
+      "id": "d4e75f78-a56d-4788-ae76-5b5b113c8e18",
+      "name": "AI Agent 7: Design Brief Generator1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        5216,
+        17808
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 8000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "f1222c71-7b49-413a-9a22-655db2c0db01",
+      "name": "Claude Model - UI Generator1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        5216,
+        18000
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Design brief: {{ $('AI Agent 7: Design Brief Generator1').item.json.output }}\nRequirements: {{ JSON.stringify($('Ai agent 4: Requirements Validator1').item.json.output) }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You check whether a generated design brief covers everything specified in \nthe original requirements, so nothing gets silently lost between steps in \nthis pipeline. You do not rewrite or fix the brief — you only report gaps.\n\nCompare the provided Design Brief (Markdown text) against the provided \nRequirements (userStories and functionalRequirements).\n\nFor each functionalRequirement, check whether it is clearly addressed \nsomewhere in the brief (in Components, Interaction Patterns, or elsewhere). \nFor each userStory, check whether the brief supports the user being able to \naccomplish that story.\n\nProduce:\n- missingRequirements: a list of functionalRequirements that are NOT clearly \n  reflected anywhere in the brief. Quote or closely paraphrase the specific \n  requirement, do not summarize vaguely. Empty list if none are missing.\n- weaklyCoveredStories: a list of userStories that are only partially or \n  ambiguously supported by the brief — where a designer could plausibly build \n  something that technically exists but doesn't actually fulfill the story. \n  Empty list if none apply.\n- overallAssessment: one of \"complete\", \"minor gaps\", or \"significant gaps\" — \n  based on how many and how critical the missing items are.\n- summary: 1-2 sentences giving a plain-language verdict, useful for someone \n  quickly checking whether this brief is ready to hand off.\n\nBe strict and literal in this check — do not assume something is covered \njust because it seems implied or likely; only count it as covered if the \nbrief actually states it. Do not flag requirements as missing due to wording \ndifferences alone (e.g. a requirement about \"medication list\" is satisfied \nby a component that lists \"current prescriptions\").\n\nReturn ONLY the raw JSON object matching the schema. No explanation, no \nmarkdown code fences, no text before or after the JSON.\n\nSchema: {\"missingRequirements\": [\"...\"], \"weaklyCoveredStories\": [\"...\"], \n\"overallAssessment\": \"complete\", \"summary\": \"...\"}"
+        }
+      },
+      "id": "47c05369-c9b1-44e3-9df3-aac20e319955",
+      "name": "AI Agent8: Completeness Checker1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        5760,
+        17440
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 5000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "634db7c7-b023-4202-a382-eb1639946bac",
+      "name": "Anthropic Chat Model9",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        5760,
+        17680
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"missingRequirements\": [\"...\"], \"weaklyCoveredStories\": [\"...\"], \"overallAssessment\": \"complete\", \"summary\": \"...\"}"
+      },
+      "id": "5f5ec3d9-4d0e-4e6c-a9b9-cf8c381d7a27",
+      "name": "Structured Output Parser9",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        5920,
+        17664
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "brief",
+              "name": "briefContent",
+              "value": "={{ $('AI Agent 7: Design Brief Generator1').item.json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2b7a715d-5ea6-448a-8d99-012a12e1ca9f",
+      "name": "Prepare Brief File1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        6096,
+        17424
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "briefContent",
+        "binaryPropertyName": "designBrief",
+        "options": {
+          "fileName": "design-brief.md"
+        }
+      },
+      "id": "682eca53-2ce7-4ec0-8084-82176c3db938",
+      "name": "Convert to Markdown File1",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        6304,
+        17472
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "returnBinary",
+        "completionTitle": "Your design brief is ready",
+        "completionMessage": "Je design-brief.md, 00-project-overview.md, 01-epics-user-stories.md en 02-toekomstvisie.md bestanden worden gedownload.",
+        "inputDataFieldName": "designBrief,projectOverview,epicsUserStories,toekomstvisie",
+        "options": {}
+      },
+      "id": "7de58bc6-43d3-49af-99aa-4977d25f6ff1",
+      "name": "Respond With File1",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        6960,
+        17792
+      ],
+      "webhookId": "1d6423a5-c16e-41fb-baea-359a995f7769"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "briefingFile",
+        "destinationKey": "briefingText",
+        "options": {}
+      },
+      "id": "1aa168c8-97b1-4f85-89ce-635fed548bcc",
+      "name": "Extract Plain Text1",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        2592,
+        17920
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const briefing = $('AI Agent 1: Briefing Summary1').item.json.output || {};\nconst persona = $('Ai Agent 2: User Persona\\'s1').item.json.output || {};\nconst tokens = $('Ai Agent3: Design Research & Style Tokens1').item.json.output || {};\nconst decisions = $input.item.json.output || '(geen designbeslissingen gevonden)';\n\nconst keyFeatures = briefing.keyFeatures || [];\nconst frustrations = persona.frustrations || [];\n\nconst md = `# 00 — Project Overview\n\n## Wat is dit project\n${briefing.projectGoal || '(niet beschikbaar)'}\n\n## Voor wie\n${briefing.targetUsers || '(niet beschikbaar)'}\n\n## Kernfunctionaliteiten\n${keyFeatures.map(f => `- ${f}`).join('\\n') || '(geen features gevonden)'}\n\n## Primaire gebruiker (persona)\n**${persona.name || '(onbekend)'}** — ${persona.role || ''}\n${persona.context || ''}\n\n**Doel:** ${persona.primaryGoal || ''}\n\n**Frustraties:**\n${frustrations.map(f => `- ${f}`).join('\\n') || '(geen gevonden)'}\n\n## Style-basis\n${tokens.sourceNote || '(geen bron gevonden)'}\n\n${decisions}\n`;\n\nreturn { json: { overviewContent: md } };"
+      },
+      "id": "9e91fb9d-0f57-4222-b3e0-639e34d42fbb",
+      "name": "Project Overview1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        6096,
+        17840
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "overviewContent",
+        "binaryPropertyName": "projectOverview",
+        "options": {
+          "fileName": "00-project-overview.md"
+        }
+      },
+      "id": "c66df271-4419-4d84-ac8c-f328443e5501",
+      "name": "Convert to Markdown File3",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        6320,
+        17856
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Missing info: {{ JSON.stringify($('Parse Requirements Output1').item.json.output.missingInfo) }}\nDesign brief open questions: {{ $('AI Agent 7: Design Brief Generator1').item.json.output }}\nDesign tokens source: {{ JSON.stringify($('Ai Agent3: Design Research & Style Tokens1').item.json.output.sourceNote) }}",
+        "options": {
+          "systemMessage": "You compile a short, actionable list of decisions that still need to be made \nbefore or during development — for both the designer and developer to review \ntogether. You do not make these decisions yourself; you surface them clearly.\n\nBased on the provided inputs (missing info from requirements gathering, open \nquestions from the design brief, and whether design tokens were grounded in \na real brand or generic assumptions), produce:\n\n## Open Design Decisions\nFor each distinct decision point, include:\n- **Decision:** what needs to be decided, phrased as a clear question\n- **Why it matters:** 1 sentence on the impact of getting this wrong\n- **Owner:** \"Designer\", \"Developer\", or \"Both\" — whoever is best placed to \n  decide this\n\nGroup decisions under these categories where relevant: Scope/Functionality, \nVisual Style, Access & Permissions, Data & Integration. Only include a \ncategory if it has actual decisions — do not force empty categories.\n\nDo not repeat information verbatim from the source documents — synthesize \nand phrase each item as a decision to be made, not a description of a gap.\n\nReturn ONLY the Markdown content, no JSON wrapper, no explanation before or \nafter."
+        }
+      },
+      "id": "f21babaf-8544-4895-9bfb-84b0d70d08ad",
+      "name": "AI Agent 9: Design Decisions Summary1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        5776,
+        17840
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 3000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "61c0bda6-1737-43eb-8dff-5c6aa109f851",
+      "name": "Anthropic Chat Model10",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        5776,
+        18000
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 4,
+        "options": {}
+      },
+      "id": "52421cfb-b2a5-4956-aef8-939a91ed1aa7",
+      "name": "Merge Files1",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.1,
+      "position": [
+        6688,
+        17728
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"projectGoal\": \"...\", \"targetUsers\": \"...\", \"keyFeatures\": [\"...\", \"...\", \"...\"], \"futureVision\": \"...\"}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        3184,
+        18016
+      ],
+      "id": "8c49af80-5fc9-4256-96bd-eace436a97f7",
+      "name": "Structured Output Parser10"
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = $input.item.json.output;\n\nfunction tryParse(str) {\n  try { return JSON.parse(str); } catch (e) { return null; }\n}\n\n// raw might already be an object if the agent returned clean JSON\nlet parsed = (typeof raw === 'object' && raw !== null) ? raw : tryParse(raw);\n\n// Handle Fable 5's double-wrapping quirk: {\"output\": \"<json string>\"}\nif (parsed && typeof parsed === 'object' && typeof parsed.output === 'string' && !parsed.userStories) {\n  const inner = tryParse(parsed.output);\n  if (inner) parsed = inner;\n}\n\n// Fallback: extract the first {...} block from raw text (handles markdown fences etc.)\nif ((!parsed || !parsed.userStories) && typeof raw === 'string') {\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  if (match) {\n    const attempt = tryParse(match[0]);\n    if (attempt) parsed = attempt;\n  }\n}\n\n// Final safety net so downstream nodes never crash on a missing field\nif (!parsed || typeof parsed !== 'object') {\n  parsed = { userStories: [], functionalRequirements: [], missingInfo: ['Could not parse model output - check AI Agent 4 raw output'] };\n}\nif (!Array.isArray(parsed.userStories)) parsed.userStories = [];\nif (!Array.isArray(parsed.functionalRequirements)) parsed.functionalRequirements = [];\nif (!Array.isArray(parsed.missingInfo)) parsed.missingInfo = [];\n\nreturn { json: { output: parsed } };"
+      },
+      "id": "a05b82b9-624f-4c14-bfde-8950061edd02",
+      "name": "Parse Requirements Output1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4336,
+        17808
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const briefing = $('AI Agent 1: Briefing Summary1').item.json.output || {};\nconst futureVision = briefing.futureVision || '';\n\nconst md = `# 02 — Toekomstvisie\n\n${futureVision || 'Er zijn geen expliciete toekomstplannen genoemd in de briefing.'}\n`;\n\nreturn { json: { toekomstvisieContent: md } };"
+      },
+      "id": "a4e93dd1-1b30-435a-8ce8-a010094ad7c9",
+      "name": "Toekomstvisie1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5792,
+        18528
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "toekomstvisieContent",
+        "binaryPropertyName": "toekomstvisie",
+        "options": {
+          "fileName": "02-toekomstvisie.md"
+        }
+      },
+      "id": "07a3a150-6ef3-4745-8df9-0cbba15861ba",
+      "name": "Convert to Markdown File7",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        6320,
+        18432
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=User Stories: {{ JSON.stringify($('Parse Requirements Output1').item.json.output.userStories) }}\nFunctional Requirements: {{ JSON.stringify($('Parse Requirements Output1').item.json.output.functionalRequirements) }}",
+        "options": {
+          "systemMessage": "You group the provided user stories and functional requirements into clear, \nnamed epics (thematic clusters), so a developer or product owner can use this \nas a structured backlog foundation.\n\nBased on the provided user stories and functional requirements:\n\n1. Identify natural thematic groupings among the user stories (e.g. by which \n   part of the product or workflow they belong to). Give each group a short, \n   clear epic name (a few words, in Title Case).\n2. Under each epic, list the user stories that belong to it, exactly as \n   provided — do not rewrite or rephrase them.\n3. Under each epic, list any functional requirements that directly relate to \n   that epic's user stories. A requirement may appear under more than one \n   epic if it genuinely applies to both; do not force a requirement into an \n   epic it doesn't belong to.\n4. If a user story or requirement doesn't fit any natural group, place it \n   under a final \"Overig\" (Other) epic rather than forcing a bad fit.\n\nStart the document with the heading exactly as: # 01 — Epics & User Stories\n\nThen format each epic as:\n## Epic: [Epic Name]\n### User Stories\n- [story]\n### Gerelateerde Functionele Requirements\n- [requirement]\n\nReturn ONLY the Markdown content, no JSON wrapper, no explanation before or \nafter."
+        }
+      },
+      "id": "c7687765-9883-4de8-98bc-bd06000cc210",
+      "name": "AI Agent 10: Epic Clustering1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        5792,
+        18192
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 3000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "81be446e-af0c-47d3-9a9c-373f642754cf",
+      "name": "Anthropic Chat Model11",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        5792,
+        18352
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "output",
+        "binaryPropertyName": "epicsUserStories",
+        "options": {
+          "fileName": "01-epics-user-stories.md"
+        }
+      },
+      "id": "d48d3d04-4e31-44d8-8867-57078b9e8c6c",
+      "name": "Convert to Markdown File8",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        6320,
+        18144
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Current project overview: {{ $('Extract MD2 Text - Project Overview1').item.json.originalOverviewText }}\nStructured feedback from this round: {{ JSON.stringify($('AI Agent A: Kritiek Structureren1').item.json.output) }}",
+        "options": {
+          "systemMessage": "You maintain an existing Markdown project overview document for a software project. You receive: the current version of this document, structured feedback from a design review round (actionItems with priority/relatedComponent, and openQuestions).\n\nMost feedback rounds are about visual or UI-level detail and do NOT require any change to this document — only update it if the feedback reveals a genuine shift in scope, goals, requirements, user stories, or future direction that is not already reflected here.\n\nRules:\n- If nothing in the feedback affects this document, return the original content completely unchanged, and start with a short section: \"## No changes\\n\\nThis feedback round did not affect this document.\"\n- If something does affect it, start with a \"## Changes in this version\" section listing what changed and why, explicitly referencing which feedback item triggered it, followed by the full updated document below.\n- Never invent scope changes that are not clearly implied by the feedback or the revised design brief.\n- Keep the same structure, section headers, and writing style as the original document, so this can replace the original 1-to-1.\n\nReturn ONLY the Markdown content, no JSON wrapper, no explanation before or after."
+        }
+      },
+      "id": "411089c1-dc29-4051-9673-5f85cb04ae7f",
+      "name": "AI Agent C: Project Overview Reviser",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        10784,
+        17968
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 4000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "c0c2a32b-63b8-4264-b8b3-b353d76bdad0",
+      "name": "Claude Model - Project Overview Reviser",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        10784,
+        18176
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "projectOverviewV2Content",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "33c6cef1-78f6-4c2a-9ab5-b5d47d27db0b",
+      "name": "Prepare Project Overview File",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        11120,
+        17968
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "projectOverviewV2Content",
+        "binaryPropertyName": "projectOverviewV2",
+        "options": {
+          "fileName": "00-project-overview-v2.md"
+        }
+      },
+      "id": "d2968a9f-4f26-4a94-985a-1abf72e618a1",
+      "name": "Convert Project Overview to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        11312,
+        17968
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Current epics & user stories: {{ $('Extract MD3 Text - Epics1').item.json.originalEpicsText }}\nStructured feedback from this round: {{ JSON.stringify($('AI Agent A: Kritiek Structureren1').item.json.output) }}",
+        "options": {
+          "systemMessage": "You maintain an existing Markdown epics & user stories document for a software project. You receive: the current version of this document, structured feedback from a design review round (actionItems with priority/relatedComponent, and openQuestions).\n\nMost feedback rounds are about visual or UI-level detail and do NOT require any change to this document — only update it if the feedback reveals a genuine shift in scope, goals, requirements, user stories, or future direction that is not already reflected here.\n\nRules:\n- If nothing in the feedback affects this document, return the original content completely unchanged, and start with a short section: \"## No changes\\n\\nThis feedback round did not affect this document.\"\n- If something does affect it, start with a \"## Changes in this version\" section listing what changed and why, explicitly referencing which feedback item triggered it, followed by the full updated document below.\n- Never invent scope changes that are not clearly implied by the feedback or the revised design brief.\n- Keep the same structure, section headers, and writing style as the original document, so this can replace the original 1-to-1.\n\nReturn ONLY the Markdown content, no JSON wrapper, no explanation before or after."
+        }
+      },
+      "id": "d2ce4774-0d49-41d4-9a6d-75c0b2aee3ff",
+      "name": "AI Agent D: Epics Reviser",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        10752,
+        18336
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 4000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "da9c8e90-56de-42b8-8537-d6ab4478d887",
+      "name": "Claude Model - Epics Reviser",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        10752,
+        18544
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "epicsV2Content",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "da7692e1-fdf9-4950-b099-8fc7c08d4c9c",
+      "name": "Prepare Epics File",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        11120,
+        18224
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "epicsV2Content",
+        "binaryPropertyName": "epicsV2",
+        "options": {
+          "fileName": "01-epics-user-stories-v2.md"
+        }
+      },
+      "id": "6bc1e4f2-6e57-43ac-b1f9-b9351edd8b33",
+      "name": "Convert Epics to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        11312,
+        18224
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Current future vision (toekomstvisie): {{ $('Extract MD4 Text - Toekomstvisie1').item.json.originalToekomstvisieText }}\nStructured feedback from this round: {{ JSON.stringify($('AI Agent A: Kritiek Structureren1').item.json.output) }}",
+        "options": {
+          "systemMessage": "You maintain an existing Markdown future vision (toekomstvisie) document for a software project. You receive: the current version of this document, structured feedback from a design review round (actionItems with priority/relatedComponent, and openQuestions).\n\nMost feedback rounds are about visual or UI-level detail and do NOT require any change to this document — only update it if the feedback reveals a genuine shift in scope, goals, requirements, user stories, or future direction that is not already reflected here.\n\nRules:\n- If nothing in the feedback affects this document, return the original content completely unchanged, and start with a short section: \"## No changes\\n\\nThis feedback round did not affect this document.\"\n- If something does affect it, start with a \"## Changes in this version\" section listing what changed and why, explicitly referencing which feedback item triggered it, followed by the full updated document below.\n- Never invent scope changes that are not clearly implied by the feedback or the revised design brief.\n- Keep the same structure, section headers, and writing style as the original document, so this can replace the original 1-to-1.\n\nReturn ONLY the Markdown content, no JSON wrapper, no explanation before or after."
+        }
+      },
+      "id": "4c505098-8894-43a8-87bd-c18668827640",
+      "name": "AI Agent E: Toekomstvisie Reviser",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        10752,
+        18688
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 4000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "be1e631f-bc49-4049-929c-a335209583f9",
+      "name": "Claude Model - Toekomstvisie Reviser",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        10752,
+        18896
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "toekomstvisieV2Content",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1e174cb-7f40-4745-8763-fa6c30e19ad8",
+      "name": "Prepare Toekomstvisie File",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        11120,
+        18480
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "toekomstvisieV2Content",
+        "binaryPropertyName": "toekomstvisieV2",
+        "options": {
+          "fileName": "02-toekomstvisie-v2.md"
+        }
+      },
+      "id": "298e19d6-ecf4-4826-9bc0-12b956930db3",
+      "name": "Convert Toekomstvisie to File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        11312,
+        18480
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 4,
+        "options": {}
+      },
+      "id": "feda3315-57b0-46e6-8be3-d7d6847273ea",
+      "name": "Merge All Output Files",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        11744,
+        18096
+      ],
+      "numberInputs": 4
+    },
+    {
+      "parameters": {
+        "operation": "compress",
+        "binaryPropertyName": "upgradedPrompt,projectOverviewV2,epicsV2,toekomstvisieV2",
+        "fileName": "updated-documents.zip"
+      },
+      "id": "c3664de7-3679-4866-8d78-91394d311523",
+      "name": "Zip Updated Documents",
+      "type": "n8n-nodes-base.compression",
+      "typeVersion": 1.1,
+      "position": [
+        12000,
+        18128
+      ]
+    },
+    {
+      "parameters": {
+        "formTitle": "Upload Feedback op Design",
+        "formDescription": "Upload de 4 originele MD-bestanden, het initiële design (.html), het transcript met alle besproken veranderingen, en voeg optioneel een screenshot met aantekeningen toe.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Design Brief (design-brief.md)",
+              "fieldType": "file",
+              "fieldName": "md1File",
+              "multipleFiles": false,
+              "acceptFileTypes": ".md",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Initieel design (.pdf)",
+              "fieldType": "file",
+              "fieldName": "initialDesignFile",
+              "multipleFiles": false,
+              "acceptFileTypes": ".pdf",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Project Overview (00-project-overview.md)",
+              "fieldType": "file",
+              "fieldName": "md2File",
+              "multipleFiles": false,
+              "acceptFileTypes": ".md",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Epics & User Stories (01-epics-user-stories.md)",
+              "fieldType": "file",
+              "fieldName": "md3File",
+              "multipleFiles": false,
+              "acceptFileTypes": ".md",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Toekomstvisie (02-toekomstvisie.md)",
+              "fieldType": "file",
+              "fieldName": "md4File",
+              "multipleFiles": false,
+              "acceptFileTypes": ".md",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Transcript met alle besproken veranderingen",
+              "fieldType": "file",
+              "fieldName": "transcriptFile",
+              "multipleFiles": false,
+              "acceptFileTypes": ".txt,.md,.pdf",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Screenshot met aantekeningen (optioneel)",
+              "fieldType": "file",
+              "fieldName": "screenshotFile",
+              "multipleFiles": false,
+              "acceptFileTypes": ".png,.jpg,.jpeg"
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "buttonLabel": "Verwerk feedback"
+        }
+      },
+      "id": "24b833ab-2a1a-43a0-b923-de1d11ed53cf",
+      "name": "Start Feedback Flow1",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        7184,
+        18080
+      ],
+      "webhookId": "565c795c-11db-4204-a64f-3bfde87fcd9c"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "md1File",
+        "destinationKey": "originalBriefText",
+        "options": {}
+      },
+      "id": "2c087a78-5169-4d9e-8bd2-cb30962faf6a",
+      "name": "Extract MD1 Text - Design Brief1",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        7392,
+        18080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "md2File",
+        "destinationKey": "originalOverviewText",
+        "options": {}
+      },
+      "id": "9bc7c7e0-8c4a-4db4-9192-456fe5aeb5b9",
+      "name": "Extract MD2 Text - Project Overview1",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        7904,
+        18080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "md3File",
+        "destinationKey": "originalEpicsText",
+        "options": {}
+      },
+      "id": "850ed350-7c7f-470a-8993-19be103025c8",
+      "name": "Extract MD3 Text - Epics1",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        8048,
+        18080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "md4File",
+        "destinationKey": "originalToekomstvisieText",
+        "options": {}
+      },
+      "id": "53a5afae-0625-4e89-b3e5-4c96d0e9185b",
+      "name": "Extract MD4 Text - Toekomstvisie1",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        8192,
+        18080
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "has-screenshot",
+              "leftValue": "={{ $binary.screenshotFile ? 'yes' : 'no' }}",
+              "rightValue": "yes",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "516c69ba-cbc7-4700-840f-50e9d9baadc9",
+      "name": "Has Screenshot?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        9008,
+        18080
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-4-6\", max_tokens: 1000, messages: [ { role: \"user\", content: [ { type: \"image\", source: { type: \"base64\", media_type: $json.screenshotMimeType, data: $json.screenshotBase64 } }, { type: \"text\", text: \"This is a screenshot of a generated UI design, possibly with annotations on it. Describe point by point what is visible and which elements are being pointed at or commented on. Additional context from the feedback transcript: \" + $json.changeTranscript } ] } ] }) }}",
+        "options": {}
+      },
+      "id": "2ee6e681-7b53-4dc8-bb0b-2cd2d5b6b1fe",
+      "name": "Screenshot Interpreter1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        9392,
+        17984
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nlet text = '';\ntry {\n  const blocks = response.content || [];\n  const textBlock = blocks.find(b => b.type === 'text');\n  text = textBlock ? textBlock.text : '';\n} catch (e) {\n  text = '';\n}\nif (!text) text = 'Could not interpret the screenshot.';\nconst prior = $('Has Screenshot?1').item;\nreturn {\n  json: { ...prior.json, screenshotInterpretation: text },\n  binary: prior.binary\n};"
+      },
+      "id": "f160d209-28a6-4887-89ca-a5859201b7b6",
+      "name": "Parse Screenshot Result1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9568,
+        17984
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "screenshotInterpretation",
+              "value": "No screenshot provided for this feedback round.",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "0a725f14-d0d6-410f-856f-1e5cd55f7c28",
+      "name": "No Screenshot Fallback1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        9312,
+        18192
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Project overview: {{ $('Extract MD2 Text - Project Overview1').item.json.originalOverviewText }}\nEpics & user stories: {{ $('Extract MD3 Text - Epics1').item.json.originalEpicsText }}\nFeedback transcript: {{ $json.changeTranscript }}\nScreenshot interpretation: {{ $json.screenshotInterpretation }}\nCurrent live design (AI-generated description from PDF export): {{ $('Parse Design PDF Result1').item.json.originalDesignText }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "You turn loose feedback on an existing UI design into a concrete, actionable list of changes for the next design round.\n\nYou receive: a feedback transcript (e.g. notes from a conversation about the current design) and, if available, an interpretation of a screenshot with annotations. You also have the project overview, epics/user stories, and the text content of the currently built design (extracted from the live HTML) provided above — use these to tie vague feedback to concrete components in the existing design, rather than inventing something new.\n\nProduce:\n- actionItems: a list of concrete changes, each with:\n  - description: what needs to change, as specific as possible\n  - relatedComponent: which component or part of the existing design this affects (base this on the project overview/epics and the live design text where possible, use \"unknown\" if it cannot be traced)\n  - priority: \"high\", \"medium\", or \"low\"\n- openQuestions: points from the feedback that are not clear enough to act on directly, and need to be clarified before the next version is built. Empty list if there are none.\n- summary: 1-2 sentences summarizing the essence of this feedback round.\n\nBe strict: do not invent changes that are not evidenced by the feedback or the screenshot interpretation. If something is vague, it belongs in openQuestions, not actionItems.\n\nReturn ONLY the raw JSON object matching the schema. No explanation, no markdown code fences.\nSchema: {\"actionItems\": [{\"description\": \"...\", \"relatedComponent\": \"...\", \"priority\": \"...\"}], \"openQuestions\": [\"...\"], \"summary\": \"...\"}"
+        }
+      },
+      "id": "3bcea88b-1eaa-4461-8c6f-030ed5d6f0fe",
+      "name": "AI Agent A: Kritiek Structureren1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        9904,
+        18128
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 3000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "c879f12e-7cf4-4bc6-8496-9e1c3c2b5320",
+      "name": "Claude Model - Kritiek Structureren1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        9888,
+        18320
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\"actionItems\": [{\"description\": \"...\", \"relatedComponent\": \"...\", \"priority\": \"high\"}], \"openQuestions\": [\"...\"], \"summary\": \"...\"}"
+      },
+      "id": "83e48412-697c-4f9f-be58-9566044fd0e4",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        10080,
+        18320
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Original design brief: {{ $('Extract MD1 Text - Design Brief1').item.json.originalBriefText }}\nProject overview: {{ $('Extract MD2 Text - Project Overview1').item.json.originalOverviewText }}\nEpics & user stories: {{ $('Extract MD3 Text - Epics1').item.json.originalEpicsText }}\nFuture vision: {{ $('Extract MD4 Text - Toekomstvisie1').item.json.originalToekomstvisieText }}\nCurrent live design (AI-generated description from PDF export): {{ $('Parse Design PDF Result1').item.json.originalDesignText }}\nStructured feedback: {{ JSON.stringify($json.output) }}",
+        "options": {
+          "systemMessage": "You write an updated version of an existing Markdown design brief for a UI/UX designer, which will replace the previous version in Claude Design. Do NOT generate HTML or CSS — only Markdown, in exactly the same structure and style as the original design brief.\n\nYou receive: the original design brief, the project overview, epics/user stories and future vision as context, the text content of the currently built design (extracted from the live HTML), and a structured feedback list (actionItems with priority and related component, plus any openQuestions).\n\nRules:\n- Process each actionItem concretely in the relevant section of the brief. Leave sections untouched if the feedback does not affect them.\n- Start the document with a short \"## Changes in this version\" section: a bullet list of what was changed compared to the previous version, so the designer can see at a glance what changed.\n- If there are openQuestions, add them under \"## Open Questions\" at the end of the document, so they don't silently disappear.\n- Stay within the scope of the future vision — do not add functionality that explicitly falls outside it, unless the feedback explicitly asks for it.\n- Keep the same sections and writing style as the original brief (Screen Overview, Components, Style Direction, Component Relationships, Interaction Patterns, Accessibility Considerations, Open Questions/Assumptions), so this brief can replace the original 1-to-1.\n\nReturn ONLY the Markdown content, no JSON wrapper, no explanation before or after."
+        }
+      },
+      "id": "525ac20c-b080-44d9-a4ba-65bc269f209a",
+      "name": "AI Agent B: Design Reviser1",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        10720,
+        17632
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "claude-fable-5",
+          "mode": "list",
+          "cachedResultName": "Claude Fable 5"
+        },
+        "options": {
+          "maxTokensToSample": 8000,
+          "thinkingMode": "adaptive"
+        }
+      },
+      "id": "a843852c-deb9-4336-b6c6-f812dc05b377",
+      "name": "Claude Model - Design Reviser1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        10768,
+        17824
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "upgradedPromptContent",
+              "value": "={{ $json.output }}\n\n---\n\n<!-- DEBUG INFO (remove once resolved):\ntranscript length = {{ $('Consolidate & Debug Context1').item.json._debugTranscriptLength }}\ntranscript preview = \"{{ $('Consolidate & Debug Context1').item.json._debugTranscriptPreview }}\"\n-->",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "23b59ddd-27ef-4e43-ac21-5d409f64a804",
+      "name": "Prepare Updated Brief File1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        11120,
+        17712
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "toText",
+        "sourceProperty": "upgradedPromptContent",
+        "binaryPropertyName": "upgradedPrompt",
+        "options": {
+          "fileName": "UpgradedPrompt.md"
+        }
+      },
+      "id": "2a8a8225-7f29-4b20-856c-53fd89c0eefb",
+      "name": "Convert to Markdown File",
+      "type": "n8n-nodes-base.convertToFile",
+      "typeVersion": 1.1,
+      "position": [
+        11312,
+        17712
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "returnBinary",
+        "completionTitle": "Je UpgradedPrompt is klaar",
+        "completionMessage": "updated-documents.zip wordt gedownload — bevat de bijgewerkte design-brief, project overview, epics/user stories en toekomstvisie (indien gewijzigd). Pak de zip uit en geef alle bestanden mee aan Claude Design.",
+        "options": {}
+      },
+      "id": "ca6b6034-60e3-4927-a4cd-3f0bceff9876",
+      "name": "Respond With File",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        12224,
+        18128
+      ],
+      "webhookId": "b57633c0-ddfd-49fa-aa36-6cc31237e315"
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "binaryPropertyName": "transcriptFile",
+        "destinationKey": "changeTranscript",
+        "options": {}
+      },
+      "id": "e5865850-000b-4b69-bd09-5c6290ce0b3e",
+      "name": "Extract Transcript Text1",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        8720,
+        18176
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "is-transcript-pdf",
+              "leftValue": "={{ $binary.transcriptFile.mimeType }}",
+              "rightValue": "pdf",
+              "operator": {
+                "type": "string",
+                "operation": "contains"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a3e33255-52d7-4d27-8304-932806951532",
+      "name": "Is Transcript PDF?1",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        8448,
+        18080
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "binaryPropertyName": "transcriptFile",
+        "options": {}
+      },
+      "id": "aa637e13-2c35-438a-9410-deae17cf9bef",
+      "name": "Extract Transcript PDF Text1",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        8656,
+        18000
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const priorBinary = $('Extract MD4 Text - Toekomstvisie1').item.binary;\nreturn {\n  json: { ...$input.item.json, changeTranscript: $json.text },\n  binary: priorBinary\n};"
+      },
+      "id": "8fcb591c-9238-443f-819e-7fc013c85295",
+      "name": "Normalize Transcript PDF Text1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        8848,
+        18000
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const buffer = await this.helpers.getBinaryDataBuffer(0, 'screenshotFile');\nconst base64 = buffer.toString('base64');\nconst info = $input.item.binary.screenshotFile;\nconst fileName = (info.fileName || '').toLowerCase();\nconst supported = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];\nlet mimeType = info.mimeType;\nif (!supported.includes(mimeType)) {\n  if (fileName.endsWith('.png')) mimeType = 'image/png';\n  else if (fileName.endsWith('.jpg') || fileName.endsWith('.jpeg')) mimeType = 'image/jpeg';\n  else if (fileName.endsWith('.gif')) mimeType = 'image/gif';\n  else if (fileName.endsWith('.webp')) mimeType = 'image/webp';\n  else mimeType = 'image/png';\n}\nreturn {\n  json: { ...$input.item.json, screenshotBase64: base64, screenshotMimeType: mimeType },\n  binary: $input.item.binary\n};"
+      },
+      "id": "d0c15f74-db5d-4014-945d-1ae532630d9b",
+      "name": "Convert Screenshot to Base",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9216,
+        17984
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const buffer = await this.helpers.getBinaryDataBuffer(0, 'initialDesignFile');\nconst base64 = buffer.toString('base64');\nreturn {\n  json: { ...$input.item.json, designPdfBase64: base64 },\n  binary: $input.item.binary\n};"
+      },
+      "id": "1571c930-96b4-41e0-b57d-528115d80e57",
+      "name": "Convert Design PDF to Base",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7520,
+        18080
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.anthropic.com/v1/messages",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "anthropicApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "anthropic-version",
+              "value": "2023-06-01"
+            },
+            {
+              "name": "content-type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"claude-sonnet-4-6\", max_tokens: 2000, messages: [ { role: \"user\", content: [ { type: \"document\", source: { type: \"base64\", media_type: \"application/pdf\", data: $json.designPdfBase64 } }, { type: \"text\", text: \"This is an export of the currently built UI design. Describe in detail everything visible: every section, field, label, table and its content, organized by section/component. Be thorough and literal about what is shown, so this description can serve as a text reference for a design brief. Do not add opinions or suggestions, only describe what is visible.\" } ] } ] }) }}",
+        "options": {}
+      },
+      "id": "e5d23d53-1b15-47e5-bcb9-4a395629a2f9",
+      "name": "Design PDF Interpreter1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        7648,
+        18080
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "id": "o44RA390Tt62dzH9",
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $json;\nlet text = '';\ntry {\n  const blocks = response.content || [];\n  const textBlock = blocks.find(b => b.type === 'text');\n  text = textBlock ? textBlock.text : '';\n} catch (e) {\n  text = '';\n}\nif (!text) text = 'Could not interpret the design PDF.';\nconst prior = $('Extract MD1 Text - Design Brief1').item;\nreturn {\n  json: { ...prior.json, originalDesignText: text },\n  binary: prior.binary\n};"
+      },
+      "id": "396d53bc-c58f-43c4-baf3-0eaff616951b",
+      "name": "Parse Design PDF Result1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        7776,
+        18080
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function safeGet(nodeName, field) {\n  try {\n    const val = $(nodeName).item.json[field];\n    return (val !== undefined && val !== null) ? val : null;\n  } catch (e) {\n    return null;\n  }\n}\n\nconst changeTranscript = safeGet('Normalize Transcript PDF Text', 'changeTranscript')\n  ?? safeGet('Extract Transcript Text', 'changeTranscript')\n  ?? '';\n\nconst screenshotInterpretation = safeGet('Parse Screenshot Result', 'screenshotInterpretation')\n  ?? safeGet('No Screenshot Fallback', 'screenshotInterpretation')\n  ?? '';\n\nreturn {\n  json: {\n    ...$input.item.json,\n    changeTranscript,\n    screenshotInterpretation,\n    _debugTranscriptLength: changeTranscript.length,\n    _debugTranscriptPreview: changeTranscript.slice(0, 150)\n  }\n};"
+      },
+      "id": "30a7a09e-f729-442f-9225-d3b8b99a3007",
+      "name": "Consolidate & Debug Context1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        9696,
+        18144
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Start Pipeline1": {
+      "main": [
+        [
+          {
+            "node": "Is PDF?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is PDF?1": {
+      "main": [
+        [
+          {
+            "node": "Extract PDF Text1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Plain Text1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract PDF Text1": {
+      "main": [
+        [
+          {
+            "node": "Normalize PDF Text1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize PDF Text1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent 1: Briefing Summary1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent 1: Briefing Summary1": {
+      "main": [
+        [
+          {
+            "node": "Ai Agent 2: User Persona's1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Model - Briefing Summary1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent 1: Briefing Summary1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ai Agent 2: User Persona's1": {
+      "main": [
+        [
+          {
+            "node": "Ai Agent3: Design Research & Style Tokens1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude model - User Persona1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Ai Agent 2: User Persona's1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Persona Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Ai Agent 2: User Persona's1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ai Agent3: Design Research & Style Tokens1": {
+      "main": [
+        [
+          {
+            "node": "Ai agent 4: Requirements Validator1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model6": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Ai Agent3: Design Research & Style Tokens1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search google in SearchApi1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Ai Agent3: Design Research & Style Tokens1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser6": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Ai Agent3: Design Research & Style Tokens1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ai agent 4: Requirements Validator1": {
+      "main": [
+        [
+          {
+            "node": "Parse Requirements Output1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model7": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Ai agent 4: Requirements Validator1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ai Agent 5: Information Architect1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent6: Content & Microcopy1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Model - Information Architect1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Ai Agent 5: Information Architect1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Architect Parser1": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Ai Agent 5: Information Architect1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent6: Content & Microcopy1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent 7: Design Brief Generator1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model8": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent6: Content & Microcopy1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser8": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent6: Content & Microcopy1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent 7: Design Brief Generator1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent8: Completeness Checker1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Agent 9: Design Decisions Summary1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Agent 10: Epic Clustering1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Toekomstvisie1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Model - UI Generator1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent 7: Design Brief Generator1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent8: Completeness Checker1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Brief File1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model9": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent8: Completeness Checker1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser9": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent8: Completeness Checker1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Brief File1": {
+      "main": [
+        [
+          {
+            "node": "Convert to Markdown File1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to Markdown File1": {
+      "main": [
+        [
+          {
+            "node": "Merge Files1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Plain Text1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent 1: Briefing Summary1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Project Overview1": {
+      "main": [
+        [
+          {
+            "node": "Convert to Markdown File3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to Markdown File3": {
+      "main": [
+        [
+          {
+            "node": "Merge Files1",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "AI Agent 9: Design Decisions Summary1": {
+      "main": [
+        [
+          {
+            "node": "Project Overview1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model10": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent 9: Design Decisions Summary1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Merge Files1": {
+      "main": [
+        [
+          {
+            "node": "Respond With File1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser10": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent 1: Briefing Summary1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Requirements Output1": {
+      "main": [
+        [
+          {
+            "node": "Ai Agent 5: Information Architect1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Toekomstvisie1": {
+      "main": [
+        [
+          {
+            "node": "Convert to Markdown File7",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to Markdown File7": {
+      "main": [
+        [
+          {
+            "node": "Merge Files1",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "AI Agent 10: Epic Clustering1": {
+      "main": [
+        [
+          {
+            "node": "Convert to Markdown File8",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Anthropic Chat Model11": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent 10: Epic Clustering1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to Markdown File8": {
+      "main": [
+        [
+          {
+            "node": "Merge Files1",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "AI Agent C: Project Overview Reviser": {
+      "main": [
+        [
+          {
+            "node": "Prepare Project Overview File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Model - Project Overview Reviser": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent C: Project Overview Reviser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Project Overview File": {
+      "main": [
+        [
+          {
+            "node": "Convert Project Overview to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Project Overview to File": {
+      "main": [
+        [
+          {
+            "node": "Merge All Output Files",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "AI Agent D: Epics Reviser": {
+      "main": [
+        [
+          {
+            "node": "Prepare Epics File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Model - Epics Reviser": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent D: Epics Reviser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Epics File": {
+      "main": [
+        [
+          {
+            "node": "Convert Epics to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Epics to File": {
+      "main": [
+        [
+          {
+            "node": "Merge All Output Files",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "AI Agent E: Toekomstvisie Reviser": {
+      "main": [
+        [
+          {
+            "node": "Prepare Toekomstvisie File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Model - Toekomstvisie Reviser": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent E: Toekomstvisie Reviser",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Toekomstvisie File": {
+      "main": [
+        [
+          {
+            "node": "Convert Toekomstvisie to File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Toekomstvisie to File": {
+      "main": [
+        [
+          {
+            "node": "Merge All Output Files",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge All Output Files": {
+      "main": [
+        [
+          {
+            "node": "Zip Updated Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Zip Updated Documents": {
+      "main": [
+        [
+          {
+            "node": "Respond With File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Start Feedback Flow1": {
+      "main": [
+        [
+          {
+            "node": "Extract MD1 Text - Design Brief1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract MD1 Text - Design Brief1": {
+      "main": [
+        [
+          {
+            "node": "Convert Design PDF to Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract MD2 Text - Project Overview1": {
+      "main": [
+        [
+          {
+            "node": "Extract MD3 Text - Epics1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract MD3 Text - Epics1": {
+      "main": [
+        [
+          {
+            "node": "Extract MD4 Text - Toekomstvisie1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract MD4 Text - Toekomstvisie1": {
+      "main": [
+        [
+          {
+            "node": "Is Transcript PDF?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Screenshot?1": {
+      "main": [
+        [
+          {
+            "node": "Convert Screenshot to Base",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No Screenshot Fallback1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Screenshot Interpreter1": {
+      "main": [
+        [
+          {
+            "node": "Parse Screenshot Result1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Screenshot Result1": {
+      "main": [
+        [
+          {
+            "node": "Consolidate & Debug Context1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "No Screenshot Fallback1": {
+      "main": [
+        [
+          {
+            "node": "Consolidate & Debug Context1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent A: Kritiek Structureren1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent B: Design Reviser1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Agent C: Project Overview Reviser",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Agent D: Epics Reviser",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "AI Agent E: Toekomstvisie Reviser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Model - Kritiek Structureren1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent A: Kritiek Structureren1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "AI Agent A: Kritiek Structureren1",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent B: Design Reviser1": {
+      "main": [
+        [
+          {
+            "node": "Prepare Updated Brief File1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Model - Design Reviser1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent B: Design Reviser1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Updated Brief File1": {
+      "main": [
+        [
+          {
+            "node": "Convert to Markdown File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert to Markdown File": {
+      "main": [
+        [
+          {
+            "node": "Merge All Output Files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Transcript Text1": {
+      "main": [
+        [
+          {
+            "node": "Has Screenshot?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Transcript PDF?1": {
+      "main": [
+        [
+          {
+            "node": "Extract Transcript PDF Text1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Extract Transcript Text1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Transcript PDF Text1": {
+      "main": [
+        [
+          {
+            "node": "Normalize Transcript PDF Text1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Transcript PDF Text1": {
+      "main": [
+        [
+          {
+            "node": "Has Screenshot?1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Screenshot to Base": {
+      "main": [
+        [
+          {
+            "node": "Screenshot Interpreter1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Convert Design PDF to Base": {
+      "main": [
+        [
+          {
+            "node": "Design PDF Interpreter1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Design PDF Interpreter1": {
+      "main": [
+        [
+          {
+            "node": "Parse Design PDF Result1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Design PDF Result1": {
+      "main": [
+        [
+          {
+            "node": "Extract MD2 Text - Project Overview1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidate & Debug Context1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent A: Kritiek Structureren1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "c2fc7ed6-af40-4c75-91ee-edb42867bf2b",
+  "meta": {
+    "instanceId": "6a141158975785c0ffd7102eb0be2e4d69cbd9821562f8f702f1cfb335c9b848"
+  },
+  "nodeGroups": [],
+  "id": "flR2OfL5olgdp7P6",
+  "tags": []
+}
